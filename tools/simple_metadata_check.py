@@ -1,7 +1,11 @@
 import requests
 import concurrent.futures
+import json
+import os
+import subprocess
 
 CHECK_IMAGES = False
+script_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'start.py'))
 
 def tryanother(url_jellyfin, api_key, user_id):
     choice = input("\nTry another category? (y or n) ")
@@ -9,8 +13,13 @@ def tryanother(url_jellyfin, api_key, user_id):
     if choice.lower() == 'y':
         check_metadata(url_jellyfin, api_key, user_id)
     else:
-        print('\nbye :)')
-        exit()
+        sure = input('Are you sure you want to exit? (press enter to exit) ')
+        if sure == '':
+            print('\nback to start.py...', )
+            subprocess.call(['python', script_path])
+            exit()
+        else:
+            pass
 
 def has_image(url_jellyfin, api_key, content_id):
     image_url = f"{url_jellyfin}/Items/{content_id}/Images/Primary"
@@ -32,9 +41,18 @@ def check_item(url_jellyfin, api_key, item):
     return None
 
 def get_user_input():
-    url_jellyfin = input("\nEnter your Jellyfin URL (http://example:8096): ")
-    api_key = input("Enter your Jellyfin API Key: ")
-    user_id = input("Enter your Jellyfin User ID: ")
+    try:
+        with open('config.json') as f:
+            config = json.load(f)
+            url_jellyfin = config['jellyfin_url']
+            api_key = config['api_key']
+            user_id = config['user_id']
+    except FileNotFoundError as e:
+        print("Config file not found, please define it first.")
+        print("Run start.py and select option 4.")
+        print("Exiting...")
+        exit()
+
     check_images_input = input('Do you want to check for images? (this option may cause issues, but is more precise) (y or n): ')
     global CHECK_IMAGES
     CHECK_IMAGES = check_images_input == 'y'
@@ -58,10 +76,26 @@ def check_metadata(url_jellyfin, api_key, user_id):
     if get_categories.status_code == 200:
         categories = get_categories.json()['Items']
         print('\nAvailable categories:')
-        for category in categories:
-            print(f"ID: {category['Id']} - Name: {category['Name']}")
-        
-        category_id = input("\nEnter the Jellyfin Category ID: ")  
+        category_dict = {}
+        for i, category in enumerate(categories, start=1):
+            print(f"{i}- ID: {category['Id']} - Name: {category['Name']}")
+            category_dict[i] = category['Id']
+
+        try:
+            category_number = input("\nEnter the number of the Jellyfin Category (type 'exit' to exit): ")
+            if category_number == 'exit':
+                print('\nback to start.py...')
+                subprocess.call(['python', script_path])
+                exit()
+
+            category_number = int(category_number)
+            category_id = category_dict.get(category_number)
+
+            if not category_id:
+                raise ValueError
+        except ValueError:
+            print("Invalid input. Please enter a valid category number.")
+            check_metadata(url_jellyfin, api_key, user_id)
         
         # Request to get movies in the selected category
         response = requests.get(f"{url_jellyfin}/Users/{user_id}/Items?ParentId={category_id}&IncludeItemTypes=Movie", headers=headers, timeout=10)
@@ -80,13 +114,13 @@ def check_metadata(url_jellyfin, api_key, user_id):
                     print('.', end='', flush=True)
 
             if missing_metadata:
-                print("\n\nMovies with missing metadata:")
+                print("\nMovies with missing metadata:")
                 for movie in missing_metadata:
                     print("* ", movie)
                 tryanother(url_jellyfin, api_key, user_id)
 
             else:
-                print("\n\nAll movies have basic metadata!")
+                print("\nAll movies have basic metadata!")
                 tryanother(url_jellyfin, api_key, user_id)
 
         else:

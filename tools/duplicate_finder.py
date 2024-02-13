@@ -1,18 +1,36 @@
+import subprocess
 import requests
+import json
+import os
+
+script_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'start.py'))
 
 def tryanother(url_jellyfin, api_key, user_id):
-    tryanother = input("\nTry another category? (y or n) ")
+    tryanother = input("\nSearch in another category? (y or n) ")
     
     if tryanother == 'y':
         check_metadata(url_jellyfin, api_key, user_id)
     else:
-        print('\nbye :)')
-        exit()
+        sure = input('Are you sure you want to exit? (press enter to exit) ')
+        if sure == '':
+            print('\nback to start.py...', )
+            subprocess.call(['python', script_path])
+            exit()
+        else:
+            pass
 
 def get_user_input():
-    url_jellyfin = input("\nEnter your Jellyfin URL (http://example:8096): ")
-    api_key = input("Enter your Jellyfin API Key: ")
-    user_id = input("Enter your Jellyfin User ID: ")
+    try:
+        with open('config.json') as f:
+            config = json.load(f)
+            url_jellyfin = config['jellyfin_url']
+            api_key = config['api_key']
+            user_id = config['user_id']
+    except FileNotFoundError as e:
+        print("Config file not found, please define it first.")
+        print("Run start.py and select option 4.")
+        print("Exiting...")
+        exit()
 
     return url_jellyfin, api_key, user_id
 
@@ -42,7 +60,8 @@ def check_metadata(url_jellyfin, api_key, user_id):
         try:
             category_number = input("\nEnter the number of the Jellyfin Category (type 'exit' to exit): ")
             if category_number == 'exit':
-                print('\nbye :)')
+                print('\nback to start.py...')
+                subprocess.call(['python', script_path])
                 exit()
 
             category_number = int(category_number)
@@ -58,7 +77,7 @@ def check_metadata(url_jellyfin, api_key, user_id):
         response = requests.get(f"{url_jellyfin}/Users/{user_id}/Items?ParentId={category_id}&IncludeItemTypes=Movie", headers=headers)
 
         if response.status_code == 200:
-            print("\nSearching for duplicates...")
+            print("Searching for duplicates...")
             movies = response.json()
             movie_names = []
             duplicate_movies = []
